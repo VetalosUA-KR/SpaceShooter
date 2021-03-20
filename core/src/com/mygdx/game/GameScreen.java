@@ -4,18 +4,23 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Camera;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.StretchViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 import java.util.LinkedList;
 import java.util.ListIterator;
+import java.util.Locale;
 
 public class GameScreen implements Screen {
 
@@ -44,8 +49,8 @@ public class GameScreen implements Screen {
     private float enemySpawnTimer = 0;
 
     //World parameters
-    private final int WORLD_WIDTH = 72;
-    private final int WORLD_HEIGHT = 128;
+    private final float WORLD_WIDTH = 72;
+    private final float WORLD_HEIGHT = 128;
     private final float TOUCH_MOVEMENT_THRESHOLD = 0.5f;
 
     //Game object
@@ -54,6 +59,12 @@ public class GameScreen implements Screen {
     private LinkedList<Laser> playerLaserList;
     private LinkedList<Laser> enemyLaserList;
     private LinkedList<Explosion> explosionList;
+
+    private int score = 0;
+
+    //Heads-Up Display
+    BitmapFont font;
+    float hudVerticalMargin, hudLeftX, hudRightX, hudCentreX, hudRow1Y, hudRow2Y, hudSectionWidth;
 
     GameScreen() {
 
@@ -97,7 +108,33 @@ public class GameScreen implements Screen {
 
         batch = new SpriteBatch();
 
+        prepareHUD();
 
+    }
+
+    private void prepareHUD() {
+        //Create a BitmapFont from our font file
+        FreeTypeFontGenerator fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("EdgeOfTheGalaxyRegular-OVEa6.otf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter fontParameter = new FreeTypeFontGenerator.FreeTypeFontParameter();
+
+        fontParameter.size = 72;
+        fontParameter.borderWidth = 3.6f;
+        fontParameter.color = new Color(1, 1, 1, 0.3f);
+        fontParameter.borderColor = new Color(0, 0, 0, 0.3f);
+
+        font = fontGenerator.generateFont(fontParameter);
+
+        //scale the font to fit world
+        font.getData().setScale(0.08f);
+
+        //calculate hud margin, etc.
+        hudVerticalMargin = font.getCapHeight() / 2;
+        hudLeftX = hudVerticalMargin;
+        hudRightX = WORLD_WIDTH * 2 / 3 - hudLeftX;
+        hudCentreX = WORLD_WIDTH / 3;
+        hudRow1Y = WORLD_HEIGHT - hudVerticalMargin;
+        hudRow2Y = hudRow1Y - hudVerticalMargin - font.getCapHeight();
+        hudSectionWidth = WORLD_WIDTH / 3;
     }
 
 
@@ -135,8 +172,22 @@ public class GameScreen implements Screen {
         //explosions
         updateAndRenderExplosion(deltaTime);
 
+        //hud rendering
+        updateAndRenderHUD();
 
         batch.end();
+    }
+
+    private void updateAndRenderHUD() {
+        //render top row labels
+        font.draw(batch, "Score", hudLeftX, hudRow1Y, hudSectionWidth, Align.left, false);
+        font.draw(batch, "Shield", hudCentreX, hudRow1Y, hudSectionWidth, Align.center, false);
+        font.draw(batch, "Lives", hudRightX, hudRow1Y, hudSectionWidth, Align.right, false);
+
+        //render second row values
+        font.draw(batch, String.format(Locale.getDefault(), "%06d", score), hudLeftX, hudRow2Y, hudSectionWidth, Align.left, false);
+        font.draw(batch, String.format(Locale.getDefault(), "%02d", playerShip.shield), hudCentreX, hudRow2Y, hudSectionWidth, Align.center, false);
+        font.draw(batch, String.format(Locale.getDefault(), "%06d", playerShip.lives), hudRightX, hudRow2Y, hudSectionWidth, Align.right, false);
     }
 
     private void spawnEnemyShips(float deltaTime) {
@@ -246,9 +297,10 @@ public class GameScreen implements Screen {
                 EnemyShip enemyShip = enemyShipListIterator.next();
                 if (enemyShip.intersects(laser.boundingBox)) {
                     //contact with enemy ship
-                    if(enemyShip.hitAndCheckDestroyed(laser)) {
+                    if (enemyShip.hitAndCheckDestroyed(laser)) {
                         enemyShipListIterator.remove();
                         explosionList.add(new Explosion(explosionTexture, new Rectangle(enemyShip.boundingBox), 0.5f));
+                        score += 100;
                     }
                     laserListIterator.remove();
                     break;
@@ -262,10 +314,11 @@ public class GameScreen implements Screen {
             Laser laser = laserListIterator.next();
             if (playerShip.intersects(laser.boundingBox)) {
                 //contact with enemy ship
-                if(playerShip.hitAndCheckDestroyed(laser)) {
+                if (playerShip.hitAndCheckDestroyed(laser)) {
                     //explosionList.remove();
                     explosionList.add(new Explosion(explosionTexture, new Rectangle(playerShip.boundingBox), 1.5f));
                     playerShip.shield = 10;
+                    playerShip.lives--;
                 }
                 laserListIterator.remove();
             }
@@ -277,10 +330,9 @@ public class GameScreen implements Screen {
         while (explosionListIterator.hasNext()) {
             Explosion explosion = explosionListIterator.next();
             explosion.update(deltaTime);
-            if(explosion.isFinished()) {
+            if (explosion.isFinished()) {
                 explosionListIterator.remove();
-            }
-            else {
+            } else {
                 explosion.draw(batch);
             }
         }
